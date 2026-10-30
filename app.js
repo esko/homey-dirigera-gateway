@@ -4,6 +4,7 @@ const Homey = require('homey');
 const Dirigera = require('dirigera-simple');
 const DirigeraDevice = require("./drivers/DirigeraDevice");
 const Utils = require('./utils');
+const { isButtonDevice, getPressCard } = require('./drivers/button-events');
 
 class IkeaDirigeraGatewayApp extends Homey.App {
 
@@ -61,21 +62,36 @@ class IkeaDirigeraGatewayApp extends Homey.App {
             this.log(`Update received: ${JSON.stringify(updateEvent)}`);
           }
           try {
-            const device = self.getDeviceFromUpdate(updateEvent);
-            if (device === null) { return }
-            const id = device.getData().id;
-            const newStatus = await self.getDevice(updateEvent.data.id).catch(this.handleError);
-            if (device instanceof DirigeraDevice && newStatus !== null) {
-              if (this._debugLoggingEnabled) {
-                this.log(`Updating device ${device.getName()} (${id}) with new status: ${JSON.stringify(newStatus)}`);
-              }
-              device.updateCapabilities(newStatus);
-            }
+            await self.handleUpdate(updateEvent);
           } catch (e) {
-            this.log(`Error (${updateEvent.data.id}): ${e.message}`);
+            this.log(`Error (${updateEvent?.data?.id || 'unknown device'}): ${e.message}`);
           }
         },
     );
+  }
+
+  async handleUpdate(updateEvent) {
+    if (!updateEvent || !updateEvent.data || typeof updateEvent.data.id !== 'string') return;
+    if (updateEvent.type === 'remotePressEvent') {
+      if (!getPressCard(updateEvent)) return;
+      // Press events contain no type/deviceType, and are not persisted state.
+      // Resolve the paired endpoint directly and dispatch before any REST fetch.
+      let device;
+      try {
+        device = this.homey.drivers.getDriver('button').getDevice({ id: updateEvent.data.id });
+      } catch (error) {
+        return; // Known event for a controller that has not been paired in Homey.
+      }
+      await device.onRemotePress(updateEvent);
+      return;
+    }
+    if (updateEvent.type !== 'deviceStateChanged') return;
+    const device = this.getDeviceFromUpdate(updateEvent);
+    if (!(device instanceof DirigeraDevice)) return;
+    const newStatus = isButtonDevice(updateEvent.data)
+      ? (await this.getDevices()).find(candidate => candidate.id === updateEvent.data.id)
+      : await this.getDevice(updateEvent.data.id);
+    if (newStatus != null) await device.updateCapabilities(newStatus);
   }
 
   getDeviceFromUpdate(updateEvent) {
@@ -91,7 +107,7 @@ class IkeaDirigeraGatewayApp extends Homey.App {
         device = null;
       }
     }
-    if (!device && typeof id === 'string' && id.includes('_')) {
+    if (!device && !isButtonDevice(updateEvent.data) && typeof id === 'string' && id.includes('_')) {
       const baseId = id.split('_', 1)[0];
       if (driver != null) {
         try {
@@ -166,6 +182,9 @@ class IkeaDirigeraGatewayApp extends Homey.App {
     }
     if (deviceType === 'occupancySensor' || deviceType === 'lightSensor') {
       driverId = 'motion-sensor';
+    }
+    if (isButtonDevice({ deviceType })) {
+      driverId = 'button';
     }
     if (driverId != null) {
       return this.homey.drivers.getDriver(driverId);

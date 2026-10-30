@@ -1,0 +1,31 @@
+{
+  "triggers": [
+    {
+      "id": "button_single_press",
+      "title": {
+        "en": "A single press is reported"
+      },
+      "hint": {
+        "en": "Uses the press pattern reported by DIRIGERA. STYRBAR does not identify the physical button."
+      }
+    },
+    {
+      "id": "button_double_press",
+      "title": {
+        "en": "A double press is reported"
+      },
+      "hint": {
+        "en": "Uses the press pattern reported by DIRIGERA. STYRBAR does not identify the physical button."
+      }
+    },
+    {
+      "id": "button_long_press",
+      "title": {
+        "en": "A long press is reported"
+      },
+      "hint": {
+        "en": "Uses the press pattern reported by DIRIGERA. STYRBAR does not identify the physical button."
+      }
+    }
+  ]
+}
